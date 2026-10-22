@@ -1,0 +1,62 @@
+From: "Christoph M. Becker" <cmbecker69@gmx.de>
+Date: Mon, 6 Sep 2021 17:42:46 +0200
+Subject: Fix #81420: ZipArchive::extractTo extracts outside of destination
+
+We need to properly detect and handle absolute paths in a portable way.
+
+(cherry picked from commit df2ceac25a43d72a0c25d3b415ae9eecc1ea195c)
+---
+  ext/zip/php_zip.c           |   4 ++--
+  ext/zip/tests/bug81420.phpt |  24 ++++++++++++++++++++++++
+  ext/zip/tests/bug81420.zip  | Bin 0 -> 218 bytes
+  3 files changed, 26 insertions(+), 2 deletions(-)
+
+diff --git a/ext/zip/php_zip.c b/ext/zip/php_zip.c
+index 6b29266d..2065d1f0 100644
+--- a/ext/zip/php_zip.c
++++ b/ext/zip/php_zip.c
+@@ -106,8 +106,8 @@ static char * php_zip_make_relative_path(char *path, size_t path_len) /* {{{ */
+ 		return NULL;
+ 	}
+ 
+-	if (IS_SLASH(path[0])) {
+-		return path + 1;
++	if (IS_ABSOLUTE_PATH(path, path_len)) {
++		return path + COPY_WHEN_ABSOLUTE(path) + 1;
+ 	}
+ 
+ 	i = path_len;
+diff --git a/ext/zip/tests/bug81420.phpt b/ext/zip/tests/bug81420.phpt
+new file mode 100644
+index 00000000..9eec0ee7
+--- /dev/null
++++ b/ext/zip/tests/bug81420.phpt
+@@ -0,0 +1,24 @@
++--TEST--
++Bug #81420 (ZipArchive::extractTo extracts outside of destination)
++--SKIPIF--
++<?php
++if (!extension_loaded("zip")) die("skip zip extension not available");
++?>
++--FILE--
++<?php
++$zip = new ZipArchive();
++$zip->open(__DIR__ . "/bug81420.zip");
++$destination = __DIR__ . "/bug81420";
++mkdir($destination);
++$zip->extractTo($destination);
++var_dump(file_exists("$destination/nt1/zzr_noharm.php"));
++?>
++--CLEAN--
++<?php
++$destination = __DIR__ . "/bug81420";
++@unlink("$destination/nt1/zzr_noharm.php");
++@rmdir("$destination/nt1");
++@rmdir($destination);
++?>
++--EXPECT--
++bool(true)
+diff --git a/ext/zip/tests/bug81420.zip b/ext/zip/tests/bug81420.zip
+new file mode 100644
+index 00000000..2e9686cb
+Binary files /dev/null and b/ext/zip/tests/bug81420.zip differ

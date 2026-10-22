@@ -1,0 +1,70 @@
+From: "Christoph M. Becker" <cmbecker69@gmx.de>
+Date: Fri, 30 Apr 2021 13:53:21 +0200
+Subject: Fix #76449: SIGSEGV in firebird_handle_doer
+
+We need to verify that the `result_size` is not larger than our buffer,
+and also should make sure that the `len` which is passed to
+`isc_vax_integer()` has a permissible value; otherwise we bail out.
+
+(cherry picked from commit 08da7c73726f7b86b67d6f0ff87c73c585a7834a)
+---
+  ext/pdo_firebird/firebird_driver.c    |   9 +++++++++
+  ext/pdo_firebird/tests/bug_76449.data | Bin 0 -> 464 bytes
+  ext/pdo_firebird/tests/bug_76449.phpt |  23 +++++++++++++++++++++++
+  3 files changed, 32 insertions(+)
+
+diff --git a/ext/pdo_firebird/firebird_driver.c b/ext/pdo_firebird/firebird_driver.c
+index 3060615e..c9f90fde 100644
+--- a/ext/pdo_firebird/firebird_driver.c
++++ b/ext/pdo_firebird/firebird_driver.c
+@@ -206,8 +206,17 @@ static zend_long firebird_handle_doer(pdo_dbh_t *dbh, const char *sql, size_t sq
+ 	if (result[0] == isc_info_sql_records) {
+ 		unsigned i = 3, result_size = isc_vax_integer(&result[1],2);
+ 
++		if (result_size > sizeof(result)) {
++			ret = -1;
++			goto free_statement;
++		}
+ 		while (result[i] != isc_info_end && i < result_size) {
+ 			short len = (short)isc_vax_integer(&result[i+1],2);
++			/* bail out on bad len */
++			if (len != 1 && len != 2 && len != 4) {
++				ret = -1;
++				goto free_statement;
++			}
+ 			if (result[i] != isc_info_req_select_count) {
+ 				ret += isc_vax_integer(&result[i+3],len);
+ 			}
+diff --git a/ext/pdo_firebird/tests/bug_76449.data b/ext/pdo_firebird/tests/bug_76449.data
+new file mode 100644
+index 00000000..bac82d33
+Binary files /dev/null and b/ext/pdo_firebird/tests/bug_76449.data differ
+diff --git a/ext/pdo_firebird/tests/bug_76449.phpt b/ext/pdo_firebird/tests/bug_76449.phpt
+new file mode 100644
+index 00000000..48a09c1d
+--- /dev/null
++++ b/ext/pdo_firebird/tests/bug_76449.phpt
+@@ -0,0 +1,23 @@
++--TEST--
++Bug #76449 (SIGSEGV in firebird_handle_doer)
++--SKIPIF--
++<?php
++if (!extension_loaded('pdo_firebird')) die("skip pdo_firebird extension not available");
++if (!extension_loaded('sockets')) die("skip sockets extension not available");
++?>
++--FILE--
++<?php
++require_once "payload_server.inc";
++
++$address = run_server(__DIR__ . "/bug_76449.data");
++
++// no need to change the credentials; we're running against a fake server
++$dsn = "firebird:dbname=inet://$address/test";
++$username = 'SYSDBA';
++$password = 'masterkey';
++
++$dbh = new PDO($dsn, $username, $password, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
++var_dump($dbh->exec("INSERT INTO test VALUES ('hihi2', 'xxxxx')"));
++?>
++--EXPECT--
++bool(false)

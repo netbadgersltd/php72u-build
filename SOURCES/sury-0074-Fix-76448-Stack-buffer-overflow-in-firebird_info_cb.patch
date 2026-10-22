@@ -1,0 +1,78 @@
+From: "Christoph M. Becker" <cmbecker69@gmx.de>
+Date: Thu, 29 Apr 2021 15:26:22 +0200
+Subject: Fix #76448: Stack buffer overflow in firebird_info_cb
+
+We ensure not to overflow the stack allocated buffer by using `strlcat`.
+
+(cherry picked from commit 67afa32541ebc4abbf633cb1e7e879b2fbb616ad)
+---
+  ext/pdo_firebird/firebird_driver.c    |   8 +++++---
+  ext/pdo_firebird/tests/bug_76448.data | Bin 0 -> 749 bytes
+  ext/pdo_firebird/tests/bug_76448.phpt |  23 +++++++++++++++++++++++
+  3 files changed, 28 insertions(+), 3 deletions(-)
+
+diff --git a/ext/pdo_firebird/firebird_driver.c b/ext/pdo_firebird/firebird_driver.c
+index c9f90fde..1e2e7746 100644
+--- a/ext/pdo_firebird/firebird_driver.c
++++ b/ext/pdo_firebird/firebird_driver.c
+@@ -509,14 +509,16 @@ static int firebird_handle_set_attribute(pdo_dbh_t *dbh, zend_long attr, zval *v
+ }
+ /* }}} */
+ 
++#define INFO_BUF_LEN 512
++
+ /* callback to used to report database server info */
+ static void firebird_info_cb(void *arg, char const *s) /* {{{ */
+ {
+ 	if (arg) {
+ 		if (*(char*)arg) { /* second call */
+-			strcat(arg, " ");
++			strlcat(arg, " ", INFO_BUF_LEN);
+ 		}
+-		strcat(arg, s);
++		strlcat(arg, s, INFO_BUF_LEN);
+ 	}
+ }
+ /* }}} */
+@@ -527,7 +529,7 @@ static int firebird_handle_get_attribute(pdo_dbh_t *dbh, zend_long attr, zval *v
+ 	pdo_firebird_db_handle *H = (pdo_firebird_db_handle *)dbh->driver_data;
+ 
+ 	switch (attr) {
+-		char tmp[512];
++		char tmp[INFO_BUF_LEN];
+ 
+ 		case PDO_ATTR_AUTOCOMMIT:
+ 			ZVAL_LONG(val,dbh->auto_commit);
+diff --git a/ext/pdo_firebird/tests/bug_76448.data b/ext/pdo_firebird/tests/bug_76448.data
+new file mode 100644
+index 00000000..e391bd87
+Binary files /dev/null and b/ext/pdo_firebird/tests/bug_76448.data differ
+diff --git a/ext/pdo_firebird/tests/bug_76448.phpt b/ext/pdo_firebird/tests/bug_76448.phpt
+new file mode 100644
+index 00000000..d13bab5b
+--- /dev/null
++++ b/ext/pdo_firebird/tests/bug_76448.phpt
+@@ -0,0 +1,23 @@
++--TEST--
++Bug #76448 (Stack buffer overflow in firebird_info_cb)
++--SKIPIF--
++<?php
++if (!extension_loaded('pdo_firebird')) die("skip podo_firebird extension not available");
++if (!extension_loaded('sockets')) die("skip sockets extension not available");
++?>
++--FILE--
++<?php
++require_once "payload_server.inc";
++
++$address = run_server(__DIR__ . "/bug_76448.data");
++
++// no need to change the credentials; we're running against a falke server
++$dsn = "firebird:dbname=inet://$address/test";
++$username = 'SYSDBA';
++$password = 'masterkey';
++
++$dbh = new PDO($dsn, $username, $password, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
++var_dump($dbh->getAttribute(PDO::ATTR_SERVER_INFO));
++?>
++--EXPECT--
++bool(false)

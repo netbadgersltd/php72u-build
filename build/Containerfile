@@ -1,0 +1,32 @@
+# CentOS 7 build root for php72u (IUS) rebuilds.
+# CentOS 7 and EPEL 7 are EOL, so point everything at the archive mirrors.
+FROM quay.io/centos/centos:centos7
+
+# vault.centos.org's CDN 403s the repodata sqlite files; any 7.9.2009 vault mirror works
+ARG VAULT=https://mirror.nsc.liu.se/centos-store/7.9.2009
+
+RUN sed -i -e 's/^mirrorlist=/#mirrorlist=/' \
+           -e "s|^#\?baseurl=http://mirror.centos.org/centos/\$releasever|baseurl=$VAULT|" \
+           /etc/yum.repos.d/CentOS-*.repo \
+ && rm -f /etc/yum.repos.d/CentOS-Sources.repo \
+ && printf '%s\n' \
+      '[epel]' \
+      'name=EPEL 7 (archive)' \
+      'baseurl=https://archives.fedoraproject.org/pub/archive/epel/7/x86_64/' \
+      'enabled=1' \
+      'gpgcheck=1' \
+      'gpgkey=https://archives.fedoraproject.org/pub/epel/RPM-GPG-KEY-EPEL-7' \
+      > /etc/yum.repos.d/epel.repo \
+ && yum -y install rpm-build yum-utils \
+ && yum -y install @buildsys-build \
+ && yum clean all
+
+COPY php72u.spec /tmp/php72u.spec
+RUN yum-builddep -y /tmp/php72u.spec && yum clean all
+
+# repo publishing: sign with EL7's own rpm/gpg so EL7 can verify the result
+RUN yum -y install rpm-sign createrepo && yum clean all
+
+RUN useradd -m builder
+USER builder
+WORKDIR /home/builder

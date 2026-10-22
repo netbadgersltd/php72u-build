@@ -1,0 +1,50 @@
+#!/bin/bash
+# Add the @REPO_ID@ yum repo (signed php72u security builds) to a CentOS 7 server.
+#   bash setup.sh            add repo + signing key
+#   bash setup.sh --update   ...then update php72u from it and restart httpd if it runs mod_php
+#
+# Later updates:
+#   yum -y --disablerepo='*' --enablerepo=@REPO_ID@ update 'php72u*' 'mod_php72u*'
+set -euo pipefail
+
+REPO_ID=@REPO_ID@
+REPO_URL=${REPO_URL:-@REPO_URL@}
+KEY_FPR=@KEY_FPR@
+KEY_FILE=/etc/pki/rpm-gpg/RPM-GPG-KEY-$REPO_ID
+
+[ "$(id -u)" = 0 ] || { echo "run as root" >&2; exit 1; }
+grep -q 'release 7' /etc/redhat-release 2>/dev/null || { echo "CentOS/RHEL 7 only" >&2; exit 1; }
+
+cat > "$KEY_FILE" <<'EOF'
+@KEY@
+EOF
+got=$(gpg --with-fingerprint --with-colons "$KEY_FILE" 2>/dev/null | awk -F: '/^fpr/{print $10; exit}')
+[ "$got" = "$KEY_FPR" ] || { echo "signing key fingerprint mismatch: '$got'" >&2; exit 1; }
+rpm --import "$KEY_FILE"
+
+cat > /etc/yum.repos.d/$REPO_ID.repo <<EOF
+[$REPO_ID]
+name=$REPO_ID - php72u security backports
+baseurl=$REPO_URL/x86_64/
+enabled=1
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=file://$KEY_FILE
+metadata_expire=1h
+EOF
+
+# fetch fresh metadata (yum imports the repomd.xml signing key here, so later runs don't prompt)
+yum -q --disablerepo='*' --enablerepo="$REPO_ID" clean metadata
+yum -q -y --disablerepo='*' --enablerepo="$REPO_ID" makecache
+echo "repo $REPO_ID configured ($REPO_URL)"
+
+[ "${1:-}" = "--update" ] || exit 0
+
+yum -y --disablerepo='*' --enablerepo="$REPO_ID" update 'php72u*' 'mod_php72u*'
+# restart so workers pick up the new binaries. php72u-fpm's scriptlet already restarts php-fpm on
+# upgrade; repeat it explicitly (idempotent) and reload httpd when mod_php is loaded.
+if systemctl -q is-active php-fpm 2>/dev/null; then systemctl restart php-fpm; fi
+if systemctl -q is-active httpd 2>/dev/null && httpd -M 2>/dev/null | grep -q php7_module; then
+  systemctl restart httpd
+fi
+rpm -q php72u-common

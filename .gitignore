@@ -1,0 +1,10 @@
+# never publish the signing key
+signing/
+
+# generated / large artifacts, published separately in the el7-repo distribution repo
+site/
+out-rpms/
+extras/
+test-baseline/
+test-patched/
+*.log

@@ -1,0 +1,20 @@
+# Plain CentOS 7 "server" for testing updates from el7-repo (no build deps installed).
+#   podman build -t localhost/el7-client -f build/Containerfile.client build
+FROM quay.io/centos/centos:centos7
+
+ARG VAULT=https://mirror.nsc.liu.se/centos-store/7.9.2009
+
+RUN sed -i -e 's/^mirrorlist=/#mirrorlist=/' \
+           -e "s|^#\?baseurl=http://mirror.centos.org/centos/\$releasever|baseurl=$VAULT|" \
+           /etc/yum.repos.d/CentOS-*.repo \
+ && rm -f /etc/yum.repos.d/CentOS-Sources.repo \
+ && printf '%s\n' \
+      '[epel]' \
+      'name=EPEL 7 (archive)' \
+      'baseurl=https://archives.fedoraproject.org/pub/archive/epel/7/x86_64/' \
+      'enabled=1' \
+      'gpgcheck=1' \
+      'gpgkey=https://archives.fedoraproject.org/pub/epel/RPM-GPG-KEY-EPEL-7' \
+      > /etc/yum.repos.d/epel.repo \
+ && yum -y install httpd procps-ng which \
+ && yum clean all

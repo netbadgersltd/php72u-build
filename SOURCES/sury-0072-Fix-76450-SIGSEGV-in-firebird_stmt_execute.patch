@@ -1,0 +1,81 @@
+From: "Christoph M. Becker" <cmbecker69@gmx.de>
+Date: Fri, 30 Apr 2021 14:10:50 +0200
+Subject: Fix #76450: SIGSEGV in firebird_stmt_execute
+
+We need to verify that the `result_size` is not larger than our buffer,
+and also should make sure that the `len` which is passed to
+`isc_vax_integer()` has a permissible value; otherwise we bail out.
+
+(cherry picked from commit bcbf8aa0c96d8d9e81ec3428232485555fae0b37)
+---
+  ext/pdo_firebird/firebird_statement.c |   7 +++++++
+  ext/pdo_firebird/tests/bug_76450.data | Bin 0 -> 464 bytes
+  ext/pdo_firebird/tests/bug_76450.phpt |  29 ++++++++++++++++++++++++++
+  3 files changed, 36 insertions(+)
+
+diff --git a/ext/pdo_firebird/firebird_statement.c b/ext/pdo_firebird/firebird_statement.c
+index c5e6b684..bdde6c7c 100644
+--- a/ext/pdo_firebird/firebird_statement.c
++++ b/ext/pdo_firebird/firebird_statement.c
+@@ -133,8 +133,14 @@ static int firebird_stmt_execute(pdo_stmt_t *stmt) /* {{{ */
+ 				}
+ 				if (result[0] == isc_info_sql_records) {
+ 					unsigned i = 3, result_size = isc_vax_integer(&result[1], 2);
++					if (result_size > sizeof(result)) {
++						goto error;
++					}
+ 					while (result[i] != isc_info_end && i < result_size) {
+ 						short len = (short) isc_vax_integer(&result[i + 1], 2);
++						if (len != 1 && len != 2 && len != 4) {
++							goto error;
++						}
+ 						if (result[i] != isc_info_req_select_count) {
+ 							affected_rows += isc_vax_integer(&result[i + 3], len);
+ 						}
+@@ -158,6 +164,7 @@ static int firebird_stmt_execute(pdo_stmt_t *stmt) /* {{{ */
+ 		return 1;
+ 	} while (0);
+ 
++error:
+ 	RECORD_ERROR(stmt);
+ 
+ 	return 0;
+diff --git a/ext/pdo_firebird/tests/bug_76450.data b/ext/pdo_firebird/tests/bug_76450.data
+new file mode 100644
+index 00000000..51f949cc
+Binary files /dev/null and b/ext/pdo_firebird/tests/bug_76450.data differ
+diff --git a/ext/pdo_firebird/tests/bug_76450.phpt b/ext/pdo_firebird/tests/bug_76450.phpt
+new file mode 100644
+index 00000000..8d14c410
+--- /dev/null
++++ b/ext/pdo_firebird/tests/bug_76450.phpt
+@@ -0,0 +1,29 @@
++--TEST--
++Bug #76450 (SIGSEGV in firebird_stmt_execute)
++--SKIPIF--
++<?php
++if (!extension_loaded('pdo_firebird')) die("skip pdo_firebird extension not available");
++if (!extension_loaded('sockets')) die("skip sockets extension not available");
++?>
++--FILE--
++<?php
++require_once "payload_server.inc";
++
++$address = run_server(__DIR__ . "/bug_76450.data");
++
++// no need to change the credentials; we're running against a fake server
++$dsn = "firebird:dbname=inet://$address/test";
++$username = 'SYSDBA';
++$password = 'masterkey';
++
++$dbh = new PDO($dsn, $username, $password, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
++$sql = "EXECUTE PROCEDURE test_proc 123";
++$query = $dbh->prepare($sql);
++try {
++    $query->execute();
++} catch (Exception $ex) {
++    echo "{$ex->getMessage()}\n";
++}
++?>
++--EXPECT--
++SQLSTATE[HY000]: General error
