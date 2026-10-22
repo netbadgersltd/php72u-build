@@ -1,0 +1,6 @@
+# CentOS 7 client with IUS php71u 7.1.33 installed, to test repo/migrate-php71-to-72.sh.
+#   podman build -t localhost/el7-php71 -f build/Containerfile.client-php71 build   (needs localhost/el7-client)
+FROM localhost/el7-client
+RUN printf '%s\n' '[ius-vault]' 'name=ius vault' 'baseurl=https://vault.ius.io/el7/x86_64/' 'enabled=1' 'gpgcheck=0' > /etc/yum.repos.d/ius-vault.repo \
+ && yum -y install php71u-cli php71u-common php71u-fpm php71u-mysqlnd php71u-mbstring php71u-gd php71u-opcache php71u-json php71u-xml php71u-pdo mod_php71u 2>&1 | tail -15 \
+ && rm /etc/yum.repos.d/ius-vault.repo && yum clean all && rpm -qa 'php71u*' | sort

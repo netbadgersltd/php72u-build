@@ -74,6 +74,8 @@ sed -e "s|@REPO_ID@|$REPO_ID|g" -e "s|@REPO_URL@|$REPO_URL|g" -e "s|@KEY_FPR@|$F
   > "$SITE/setup.sh"
 cp "$TOP/repo/check-php2shell.sh" "$SITE/check-php2shell.sh"
 cp "$TOP/repo/update.sh" "$SITE/update.sh"
+cp "$TOP/repo/migrate-php71-to-72.sh" "$SITE/migrate-php71-to-72.sh"
+cp "$TOP/repo/centos7-repo-cleanup.sh" "$SITE/centos7-repo-cleanup.sh"
 cp "$TOP/repo/EVIDENCE.md" "$SITE/EVIDENCE.md"
 
 echo "repo built in $SITE (key $FPR)"

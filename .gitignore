@@ -8,3 +8,4 @@ extras/
 test-baseline/
 test-patched/
 *.log
+marketing/

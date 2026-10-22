@@ -65,3 +65,5 @@ Same OS, same probes, opposite results — the difference is the patch. Reproduc
 - PHP upstream commit "Avoid state corruption via bailout" (`712e60f9`), the fix this build backports.
 - GHSA-w8hw-w9fx-j79w (CVE-2026-109618), GHSA-6wmf-4rv5-p3rp (CVE-2026-109619).
 - AlmaLinux shipped the same backport independently (`php-7.2.24-1...alma.1`), compared in `../NOTES.md`.
+- Full source + build recipe: https://github.com/netbadgersltd/php72u-build ; the source RPM
+  is published at https://netbadgersltd.github.io/el7-repo/SRPMS/ . Rebuild it from the SRPM and compare, rather than trusting the binaries.

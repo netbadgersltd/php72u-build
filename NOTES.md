@@ -208,3 +208,23 @@ IUS-built pecl modules (`php72u-pecl-*`, ioncube) keep loading without a rebuild
 - System libs from EL7/EPEL7 (openssl 1.0.2k, libxml2 2.9.1, oniguruma 5.9.5, curl 7.29): frozen
   since CentOS 7/EPEL 7 EOL (June 2024).
 - The OS itself: CentOS 7 is EOL. This buys time; it is not a substitute for migrating.
+
+## php71u -> php72u migration (`repo/migrate-php71-to-72.sh`)
+
+For servers still on IUS php71u (update.sh does nothing there: php71u and php72u conflict).
+`--check-only` shows the plan; otherwise: add repo, map each installed `php71u-X` to `php72u-X`
+(aborts before any change if one has no twin in el7-repo, e.g. pecl modules, mcrypt), back up
+`/etc/php*` to `/root/php71u-backup-*.tar.gz`, one `yum swap`, restart php-fpm/httpd, run
+check-php2shell with evidence. `libargon2` (EPEL, re-signed, in `extras/`) ships in the repo since
+php72u needs it and php71u servers lack it. Tested in a container on IUS 7.1.33 (cli, common, fpm,
+mod_php, gd, json, mbstring, mysqlnd, opcache, pdo, xml): PROTECTED afterwards. It is a minor-version
+upgrade (7.1 -> 7.2), so the app needs testing; the script does not test the application.
+
+## centos7-repo-cleanup.sh (`repo/`)
+
+Repoints dead CentOS 7 repos so yum works again (prerequisite for php71->72 migration on old
+servers). Per enabled repo: works already -> untouched; known id (base/updates/extras/centosplus/
+fasttrack/cr -> mirror.nsc.liu.se centos-store/centos/7; sclo-rh/sclo-sclo -> vault.centos.org 7.9.2009;
+epel -> archives.fedoraproject.org; ius -> vault.ius.io) -> baseurl replaced, old line kept as
+`#cleanup#`; unknown dead repo -> asked, then `enabled=0` (`-y` = no prompt, `--dry-run` = report only).
+Backup in `/root/yum.repos.d-backup-*`. Tested in a stock centos:7 container with epel/ius/remi.
